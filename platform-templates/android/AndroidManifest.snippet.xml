@@ -1,0 +1,41 @@
+<!--
+  After running `npm run add:android`, open
+  android/app/src/main/AndroidManifest.xml and merge these
+  permissions into the manifest (above the <application> tag).
+-->
+
+<!-- Network -->
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+<!-- Microphone for dictation -->
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
+<!-- Foreground service so dictation continues if the user switches apps -->
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+<uses-permission android:name="android.permission.WAKE_LOCK" />
+
+<!-- File / media access for uploads (Android 13+ uses scoped media perms) -->
+<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+
+<!-- Push notifications (Android 13+) -->
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+<!-- Biometric auth -->
+<uses-permission android:name="android.permission.USE_BIOMETRIC" />
+
+<!-- Camera (for document scanning into patient records) -->
+<uses-permission android:name="android.permission.CAMERA" />
+<uses-feature android:name="android.hardware.camera" android:required="false" />
+<uses-feature android:name="android.hardware.microphone" android:required="true" />
+
+<!--
+  Inside the <application> tag, also set:
+    android:allowBackup="false"
+    android:fullBackupContent="false"
+    android:dataExtractionRules="@xml/data_extraction_rules"
+  to keep PHI out of cloud backups (HIPAA).
+-->

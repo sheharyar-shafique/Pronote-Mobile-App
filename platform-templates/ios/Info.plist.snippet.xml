@@ -1,0 +1,45 @@
+<!--
+  After running `npm run add:ios`, open ios/App/App/Info.plist
+  and add these keys inside the top-level <dict>.
+
+  Apple REJECTS apps that access the mic/camera/etc without a usage
+  description string explaining why. These strings are shown verbatim
+  in the OS permission prompt.
+-->
+
+<key>NSMicrophoneUsageDescription</key>
+<string>Pronote uses the microphone to record dictated clinical notes for transcription.</string>
+
+<key>NSSpeechRecognitionUsageDescription</key>
+<string>Pronote uses speech recognition to transcribe dictated clinical notes.</string>
+
+<key>NSPhotoLibraryUsageDescription</key>
+<string>Pronote needs access to your photo library so you can attach images to patient records.</string>
+
+<key>NSPhotoLibraryAddUsageDescription</key>
+<string>Pronote saves exported PDF notes to your photo library when you choose to download them.</string>
+
+<key>NSCameraUsageDescription</key>
+<string>Pronote uses the camera to capture documents and attach them to patient records.</string>
+
+<key>NSFaceIDUsageDescription</key>
+<string>Pronote uses Face ID to keep your patient data secure when you re-open the app.</string>
+
+<!-- Background audio so recordings don't stop when the screen locks -->
+<key>UIBackgroundModes</key>
+<array>
+  <string>audio</string>
+  <string>remote-notification</string>
+</array>
+
+<!-- App Transport Security: only allow HTTPS to your backend -->
+<key>NSAppTransportSecurity</key>
+<dict>
+  <key>NSAllowsArbitraryLoads</key>
+  <false/>
+</dict>
+
+<!-- HIPAA-friendly: do NOT include the device in iCloud backups for sensitive files
+     (Capacitor's filesystem plugin already excludes its data when configured). -->
+<key>ITSAppUsesNonExemptEncryption</key>
+<false/>
