@@ -23,7 +23,7 @@ import { audioApi, notesApi, templatesApi } from '../services/api';
 import toast from 'react-hot-toast';
 import type { ClinicalNote, Template } from '../types';
 
-const MIN_RECORDING_SECONDS = 30;
+const MIN_RECORDING_SECONDS = 20;
 
 export default function CapturePage() {
   const navigate = useNavigate();
@@ -179,7 +179,7 @@ export default function CapturePage() {
     if (!meetsMinDuration) {
       setShakingStop(true);
       setTimeout(() => setShakingStop(false), 600);
-      toast.error(`Please record for at least 30 seconds. ${remainingSeconds}s remaining.`, {
+      toast.error(`Please record for at least ${MIN_RECORDING_SECONDS} seconds. ${remainingSeconds}s remaining.`, {
         icon: '⏱️',
         duration: 3000,
       });
@@ -187,28 +187,62 @@ export default function CapturePage() {
     }
     setIsProcessing(true);
     try {
-      const audioBlob = await stopRecording();
-      
-      if (audioBlob) {
-        // Step 1: Upload the audio file
-        toast.loading('Uploading audio...', { id: 'processing' });
-        const audioFile = new File([audioBlob], `recording-${Date.now()}.webm`, { type: 'audio/webm' });
-        const uploadResult = await audioApi.upload(audioFile);
-        
-        // Step 2: Transcribe with OpenAI Whisper
-        toast.loading('Transcribing with AI...', { id: 'processing' });
-        const transcriptionResult = await audioApi.transcribe(uploadResult.id);
-        
-        // Step 3: Generate clinical note with GPT-4
-        toast.loading('Generating clinical note...', { id: 'processing' });
+      // Long recordings are auto-segmented by the recorder into <=10-min chunks so each
+      // upload stays under Whisper's 25 MB limit. Upload + transcribe all segments IN
+      // PARALLEL — sequential processing made a 90-min recording wait ~9 min for results.
+      // Promise.all preserves array order so the concatenated transcript is in temporal order.
+      const segments = await stopRecording();
+
+      if (segments && segments.length > 0) {
+        const transcribeSegment = async (segBlob: Blob, i: number): Promise<string> => {
+          const blobType = segBlob.type || 'audio/webm';
+          const ext =
+            blobType.includes('mp4') ? 'mp4'
+            : blobType.includes('ogg') ? 'ogg'
+            : blobType.includes('wav') ? 'wav'
+            : 'webm';
+          const segFile = new File(
+            [segBlob],
+            `recording-${Date.now()}-${i + 1}of${segments.length}.${ext}`,
+            { type: blobType }
+          );
+          const uploadResult = await audioApi.upload(segFile);
+          const transcriptionResult = await audioApi.transcribe(uploadResult.id);
+          return transcriptionResult.transcription?.trim() ?? '';
+        };
+
+        const transcripts = (await Promise.all(segments.map(transcribeSegment))).filter(Boolean);
+
+        if (transcripts.length === 0) {
+          throw new Error('Transcription returned no text — the recording may have been silent.');
+        }
+
+        // Synthesize a single transcription for note generation. Two newlines between
+        // segments so the model can see the boundary without treating it as new speaker.
+        const transcriptionResult = { transcription: transcripts.join('\n\n') };
+
+        // Step 3: Generate clinical note with GPT-4. Pull any saved Patient Context AND
+        // saved Treatment Plan for this patient (set on /patients/:name) and forward both
+        // so the AI can incorporate known conditions / goals / planned care not mentioned
+        // in the recording.
+        let savedContext = '';
+        let savedTreatmentPlan = '';
+        if (patientName) {
+          try {
+            const slug = patientName.toLowerCase().replace(/\s+/g, '_');
+            savedContext = localStorage.getItem(`pronote_patient_context_${slug}`) ?? '';
+            savedTreatmentPlan = localStorage.getItem(`pronote_patient_treatment_plan_${slug}`) ?? '';
+          } catch {}
+        }
+
         const noteResult = await audioApi.generateNote(
           transcriptionResult.transcription,
           selectedTemplate,
           patientName || undefined,
-          resolvedTemplate?.sectionSettings
+          resolvedTemplate?.sectionSettings,
+          savedContext.trim() || undefined,
+          savedTreatmentPlan.trim() || undefined
         );
-
-        toast.dismiss('processing');
 
         // Warn if server returned mock/placeholder content instead of real AI
         if (noteResult.source === 'mock') {
@@ -218,29 +252,35 @@ export default function CapturePage() {
           });
         }
 
-        // Sanitize GPT content — strip null / non-string values before sending
+        // Sanitize GPT content — coerce null/undefined to empty string so the section
+        // still renders in the editor (otherwise dropping the key makes the body blank).
         const sanitizedContent: Record<string, unknown> = {};
         if (noteResult.content && typeof noteResult.content === 'object') {
           for (const [key, value] of Object.entries(noteResult.content)) {
-            if (value != null && typeof value === 'string') {
+            if (typeof value === 'string') {
               sanitizedContent[key] = value;
             } else if (value != null && typeof value === 'object') {
               // keep objects like customSections as-is
               sanitizedContent[key] = value;
+            } else {
+              sanitizedContent[key] = '';
             }
-            // skip null / undefined / non-string primitives
           }
         }
         
-        // Step 4: Create the note in the database
+        // Step 4: Create the note in the database. Send the recording duration as
+        // processingTime so it lands in clinical_notes.processing_time_seconds — the
+        // patient notes table reads it back as durationSeconds.
+        const recordingDuration = session.duration;
         const createdNote = await notesApi.create({
           patientName: patientName || 'Unknown Patient',
           dateOfService: new Date().toISOString().split('T')[0],
           template: selectedTemplate,
           content: sanitizedContent as any,
           transcription: transcriptionResult.transcription,
+          processingTime: recordingDuration,
         });
-        
+
         // Also add to local store for immediate UI update
         const newNote: ClinicalNote = {
           id: createdNote.id,
@@ -252,6 +292,7 @@ export default function CapturePage() {
           status: createdNote.status,
           transcription: createdNote.transcription,
           audioUrl: createdNote.audioUrl,
+          durationSeconds: createdNote.durationSeconds ?? recordingDuration,
           createdAt: new Date(createdNote.createdAt),
           updatedAt: new Date(createdNote.updatedAt),
         };
@@ -262,7 +303,6 @@ export default function CapturePage() {
       }
     } catch (error: any) {
       console.error('Recording processing error:', error);
-      toast.dismiss('processing');
       // Show specific field errors if available (Zod validation details)
       const msg = error?.details
         ? `Validation failed: ${error.details.map((d: any) => `${d.field}: ${d.message}`).join(', ')}`
@@ -598,7 +638,7 @@ export default function CapturePage() {
                 <div className="mt-8 p-4 bg-white/5 border border-white/10 rounded-xl">
                   <h4 className="font-medium text-emerald-400 mb-2">💡 Tips for best results</h4>
                   <ul className="text-sm text-slate-400 space-y-1">
-                    <li>• <span className="text-amber-400 font-semibold">Minimum 30 seconds</span> required per recording</li>
+                    <li>• <span className="text-amber-400 font-semibold">Minimum {MIN_RECORDING_SECONDS} seconds</span> required per recording</li>
                     <li>• Speak clearly and at a natural pace</li>
                     <li>• Minimize background noise</li>
                     <li>• State important details explicitly</li>

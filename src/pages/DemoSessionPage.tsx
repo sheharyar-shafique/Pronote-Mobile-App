@@ -10,7 +10,7 @@ import type { ClinicalNote } from '../types';
 
 const DEMO_PATIENT = 'Sarah Brown';
 const DEMO_TEMPLATE = 'soap' as const;
-const MIN_RECORDING_SECONDS = 30;
+const MIN_RECORDING_SECONDS = 20;
 
 const DEMO_SCRIPT: { role: 'You' | 'Patient'; text: string }[] = [
   { role: 'You',     text: 'Hi Ms. Brown. What brings you in today?' },
@@ -79,32 +79,53 @@ export default function DemoSessionPage() {
     }
     setIsProcessing(true);
     try {
-      const audioBlob = await stopRecording();
-      if (audioBlob) {
-        toast.loading('Uploading demo audio…', { id: 'demo' });
-        const file = new File([audioBlob], `demo-${Date.now()}.webm`, { type: 'audio/webm' });
-        const uploaded = await audioApi.upload(file);
+      // Long recordings come back as multiple <=10-min segments; upload + transcribe
+      // them all in parallel and concatenate. Demo sessions are short, so this is
+      // usually a single segment.
+      const segments = await stopRecording();
+      if (segments && segments.length > 0) {
+        const transcribeSegment = async (segBlob: Blob, i: number): Promise<string> => {
+          const blobType = segBlob.type || 'audio/webm';
+          const ext =
+            blobType.includes('mp4') ? 'mp4'
+            : blobType.includes('ogg') ? 'ogg'
+            : blobType.includes('wav') ? 'wav'
+            : 'webm';
+          const file = new File(
+            [segBlob],
+            `demo-${Date.now()}-${i + 1}of${segments.length}.${ext}`,
+            { type: blobType }
+          );
+          const uploaded = await audioApi.upload(file);
+          const t = await audioApi.transcribe(uploaded.id);
+          return t.transcription?.trim() ?? '';
+        };
 
-        toast.loading('Transcribing…', { id: 'demo' });
-        const transcribed = await audioApi.transcribe(uploaded.id);
+        const transcripts = (await Promise.all(segments.map(transcribeSegment))).filter(Boolean);
 
-        toast.loading('Generating clinical note…', { id: 'demo' });
+        if (transcripts.length === 0) {
+          throw new Error('Transcription returned no text — the recording may have been silent.');
+        }
+
+        const transcribed = { transcription: transcripts.join('\n\n') };
+
         const generated = await audioApi.generateNote(
           transcribed.transcription,
           DEMO_TEMPLATE,
           DEMO_PATIENT,
         );
 
-        toast.dismiss('demo');
-
-        // Sanitize GPT content — strip null / non-string values before sending
+        // Sanitize GPT content — coerce null/undefined to empty string so the section
+        // still renders in the editor (otherwise dropping the key makes the body blank).
         const sanitizedContent: Record<string, unknown> = {};
         if (generated.content && typeof generated.content === 'object') {
           for (const [key, value] of Object.entries(generated.content)) {
-            if (value != null && typeof value === 'string') {
+            if (typeof value === 'string') {
               sanitizedContent[key] = value;
             } else if (value != null && typeof value === 'object') {
               sanitizedContent[key] = value;
+            } else {
+              sanitizedContent[key] = '';
             }
           }
         }
@@ -115,6 +136,7 @@ export default function DemoSessionPage() {
           template: DEMO_TEMPLATE,
           content: sanitizedContent as any,
           transcription: transcribed.transcription,
+          processingTime: session.duration,
         });
 
         const newNote: ClinicalNote = {
@@ -136,7 +158,6 @@ export default function DemoSessionPage() {
         navigate(`/notes/${newNote.id}`);
       }
     } catch (error: any) {
-      toast.dismiss('demo');
       const msg = error?.details
         ? `Validation failed: ${error.details.map((d: any) => `${d.field}: ${d.message}`).join(', ')}`
         : error.message || 'Failed to process demo recording';

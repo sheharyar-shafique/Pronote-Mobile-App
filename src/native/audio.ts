@@ -1,5 +1,15 @@
-import { VoiceRecorder } from '@capacitor-community/voice-recorder';
 import { isNative } from './platform';
+
+/**
+ * Native voice recorder facade.
+ *
+ * Currently the app uses the browser MediaRecorder (via the recording store) on
+ * both web and inside Capacitor's WebView, which works on iOS 14.3+ and all
+ * Android WebViews we target. The functions below are placeholders so that we
+ * can swap in a native plugin (e.g. `capacitor-voice-recorder`, which is the
+ * un-scoped package — `@capacitor-community/voice-recorder` referenced earlier
+ * is NOT published on npm) without changing call sites.
+ */
 
 export interface RecordingResult {
   base64Audio: string;
@@ -8,49 +18,34 @@ export interface RecordingResult {
 }
 
 export async function requestMicPermission(): Promise<boolean> {
-  if (!isNative()) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((t) => t.stop());
-      return true;
-    } catch {
-      return false;
-    }
+  // For now, always go through the browser permission API — works in WKWebView and
+  // Android WebView. The native helper wiring lives behind isNative() so we can
+  // swap to a plugin later without touching call sites.
+  void isNative;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((t) => t.stop());
+    return true;
+  } catch {
+    return false;
   }
-  const res = await VoiceRecorder.requestAudioRecordingPermission();
-  return res.value === true;
 }
 
 export async function startRecording(): Promise<void> {
-  if (!isNative()) {
-    throw new Error('startRecording (native) called on web — use the existing MediaRecorder flow.');
-  }
-  const can = await VoiceRecorder.canDeviceVoiceRecord();
-  if (!can.value) throw new Error('Device cannot record audio.');
-  await VoiceRecorder.startRecording();
+  throw new Error(
+    'native startRecording is a stub — the app uses the MediaRecorder flow in src/store/index.ts'
+  );
 }
 
 export async function stopRecording(): Promise<RecordingResult> {
-  const res = await VoiceRecorder.stopRecording();
-  return {
-    base64Audio: res.value.recordDataBase64,
-    mimeType: res.value.mimeType,
-    durationMs: res.value.msDuration,
-  };
+  throw new Error(
+    'native stopRecording is a stub — the app uses the MediaRecorder flow in src/store/index.ts'
+  );
 }
 
-export async function pauseRecording(): Promise<void> {
-  await VoiceRecorder.pauseRecording();
-}
+export async function pauseRecording(): Promise<void> {}
+export async function resumeRecording(): Promise<void> {}
 
-export async function resumeRecording(): Promise<void> {
-  await VoiceRecorder.resumeRecording();
-}
-
-/**
- * Convert the base64 audio returned by the native recorder into a Blob
- * suitable for FormData upload to the existing /audio backend route.
- */
 export function base64ToBlob(base64: string, mimeType: string): Blob {
   const byteChars = atob(base64);
   const bytes = new Uint8Array(byteChars.length);

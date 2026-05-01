@@ -15,6 +15,7 @@ import {
   NotesPage,
   NoteEditorPage,
   PatientPage,
+  PatientsListPage,
   TemplatesPage,
   TemplateEditorPage,
   HelpCenterPage,
@@ -226,6 +227,14 @@ function App() {
           }
         />
         <Route
+          path="/patients"
+          element={
+            <ProtectedRoute>
+              <PatientsListPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/patients/:patientName"
           element={
             <ProtectedRoute>
@@ -238,6 +247,14 @@ function App() {
           element={
             <ProtectedRoute>
               <TemplatesPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/templates/new"
+          element={
+            <ProtectedRoute>
+              <TemplateEditorPage />
             </ProtectedRoute>
           }
         />

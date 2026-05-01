@@ -222,24 +222,23 @@ export default function DictationPage() {
     
     try {
       // Generate clinical note using real AI
-      toast.loading('Generating clinical note with AI...', { id: 'dictation-process' });
-      
       const noteResult = await audioApi.generateNote(
         transcript,
         selectedTemplate,
         patientName || undefined
       );
-      
-      toast.dismiss('dictation-process');
 
-      // Sanitize GPT content — strip null / non-string values before sending
+      // Sanitize GPT content — coerce null/undefined to empty string so the section
+      // still renders in the editor (otherwise dropping the key makes the body blank).
       const sanitizedContent: Record<string, unknown> = {};
       if (noteResult.content && typeof noteResult.content === 'object') {
         for (const [key, value] of Object.entries(noteResult.content)) {
-          if (value != null && typeof value === 'string') {
+          if (typeof value === 'string') {
             sanitizedContent[key] = value;
           } else if (value != null && typeof value === 'object') {
             sanitizedContent[key] = value;
+          } else {
+            sanitizedContent[key] = '';
           }
         }
       }
@@ -272,7 +271,6 @@ export default function DictationPage() {
       navigate(`/notes/${newNote.id}`);
     } catch (error: any) {
       console.error('Dictation processing error:', error);
-      toast.dismiss('dictation-process');
       const msg = error?.details
         ? `Validation failed: ${error.details.map((d: any) => `${d.field}: ${d.message}`).join(', ')}`
         : error.message || 'Failed to generate note';

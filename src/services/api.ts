@@ -376,11 +376,33 @@ export const audioApi = {
     transcription: string,
     template: string,
     patientName?: string,
-    sectionSettings?: Array<{ title: string; verbosity: string; styling: string; content: string; stylingInstructions: string }>
+    sectionSettings?: Array<{ title: string; verbosity: string; styling: string; content: string; stylingInstructions: string }>,
+    patientContext?: string,
+    treatmentPlan?: string
   ) => {
     return apiFetch<{ content: NoteContent; template: string; source: 'ai' | 'mock' }>('/audio/generate-note', {
       method: 'POST',
-      body: JSON.stringify({ transcription, template, patientName, sectionSettings }),
+      body: JSON.stringify({ transcription, template, patientName, sectionSettings, patientContext, treatmentPlan }),
+    });
+  },
+
+  generateTreatmentPlan: async (noteIds: string[], patientName?: string) => {
+    return apiFetch<{ plan: string; source: 'ai' | 'mock' }>('/audio/generate-treatment-plan', {
+      method: 'POST',
+      body: JSON.stringify({ noteIds, patientName }),
+    });
+  },
+
+  generateReport: async (
+    noteIds: string[],
+    diagnosis: string,
+    patientName: string,
+    startDate: string,
+    endDate: string
+  ) => {
+    return apiFetch<{ content: string; source: 'ai' | 'mock' }>('/audio/generate-report', {
+      method: 'POST',
+      body: JSON.stringify({ noteIds, diagnosis, patientName, startDate, endDate }),
     });
   },
 
@@ -667,6 +689,9 @@ export interface CreateNoteData {
   content?: NoteContent;
   status?: 'draft' | 'completed' | 'signed';
   transcription?: string;
+  // Recording length in seconds; backend persists this in processing_time_seconds
+  // and echoes it back as ClinicalNote.durationSeconds.
+  processingTime?: number;
 }
 
 export interface Template {

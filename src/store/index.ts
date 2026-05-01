@@ -88,7 +88,14 @@ interface RecordingState {
   mediaRecorder: MediaRecorder | null;
   audioChunks: Blob[];
   startRecording: () => Promise<void>;
-  stopRecording: () => Promise<Blob | null>;
+  /**
+   * Stops recording and returns ALL audio segments produced during the session.
+   * Long recordings are auto-segmented every CHUNK_DURATION_MS to keep each
+   * segment under Whisper's 25 MB upload limit; consumers should iterate the
+   * returned array, transcribe each segment, and concatenate the transcripts.
+   * Short recordings produce a single-element array.
+   */
+  stopRecording: () => Promise<Blob[]>;
   pauseRecording: () => void;
   resumeRecording: () => void;
   resetRecording: () => void;
@@ -393,6 +400,27 @@ export const useNotesStore = create<NotesState>()(
     })
 );
 
+// Auto-segment long recordings every 10 minutes. Each segment is a complete,
+// independently-decodable audio file, kept well under Whisper's 25 MB upload
+// limit even if the browser ignores audioBitsPerSecond. Consumers transcribe
+// each segment in turn and concatenate the transcripts.
+const CHUNK_DURATION_MS = 10 * 60 * 1000;
+
+// Module-scoped session state for the auto-rotation. Sits outside zustand
+// because timers and live recorder references aren't useful as React state
+// and reading them via get() across closures gets fiddly.
+interface ChunkingSession {
+  stream: MediaStream;
+  recorderOpts: MediaRecorderOptions;
+  completedSegments: Blob[];
+  currentRecorder: MediaRecorder;
+  currentChunks: Blob[];
+  segmentTimer: ReturnType<typeof setTimeout> | null;
+  isPaused: boolean;
+  finalize: () => Promise<Blob[]>;
+}
+let chunking: ChunkingSession | null = null;
+
 // Recording Store
 export const useRecordingStore = create<RecordingState>()((set, get) => ({
   session: {
@@ -404,21 +432,123 @@ export const useRecordingStore = create<RecordingState>()((set, get) => ({
   audioChunks: [],
   startRecording: async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      const audioChunks: Blob[] = [];
-      
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunks.push(event.data);
-          set({ audioChunks: [...audioChunks] });
+      // Mono channel + browser-default sample rate. Whisper resamples to 16kHz internally,
+      // and forcing sampleRate: 16000 in getUserMedia caused intermittent failures on desktop
+      // where the audio device couldn't honor the constraint.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
+
+      const candidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4;codecs=mp4a.40.2',
+        'audio/mp4',
+        'audio/ogg;codecs=opus',
+      ];
+      const mimeType =
+        candidates.find(t => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)) || '';
+
+      // Cap bitrate at 24 kbps mono Opus. Combined with auto-segmentation, this keeps
+      // each segment small even if the browser silently overrides the bitrate hint.
+      const recorderOpts: MediaRecorderOptions = { audioBitsPerSecond: 24000 };
+      if (mimeType) recorderOpts.mimeType = mimeType;
+
+      // Build a fresh MediaRecorder for the next segment. Returns the recorder + the
+      // closure-scoped chunks array it accumulates into.
+      const buildRecorder = () => {
+        const rec = new MediaRecorder(stream, recorderOpts);
+        const chunks: Blob[] = [];
+        rec.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            chunks.push(event.data);
+            // Mirror to the store so the legacy audioChunks consumer keeps showing live size.
+            const live = chunking?.currentChunks ?? [];
+            live.push(event.data);
+            set({ audioChunks: [...live] });
+          }
+        };
+        rec.start();
+        return { rec, chunks };
+      };
+
+      // Build the FIRST recorder and seed the chunking session.
+      const first = buildRecorder();
+      const session: ChunkingSession = {
+        stream,
+        recorderOpts,
+        completedSegments: [],
+        currentRecorder: first.rec,
+        currentChunks: first.chunks,
+        segmentTimer: null,
+        isPaused: false,
+        finalize: () => Promise.resolve([]),
+      };
+
+      const finalizeCurrent = (): Promise<void> =>
+        new Promise<void>((resolve) => {
+          const rec = session.currentRecorder;
+          const chunks = session.currentChunks;
+          rec.onstop = () => {
+            if (chunks.length > 0) {
+              const blob = new Blob(chunks, { type: rec.mimeType || 'audio/webm' });
+              if (blob.size > 0) session.completedSegments.push(blob);
+            }
+            resolve();
+          };
+          // If already inactive (e.g. error path), just resolve.
+          if (rec.state === 'inactive') resolve();
+          else rec.stop();
+        });
+
+      const rotate = async () => {
+        // Don't rotate while paused — re-arm the timer when the user resumes.
+        if (session.isPaused) {
+          scheduleRotate();
+          return;
+        }
+        await finalizeCurrent();
+        const next = buildRecorder();
+        session.currentRecorder = next.rec;
+        session.currentChunks = next.chunks;
+        // Reset the live mirror so duration display starts fresh per segment.
+        set({ audioChunks: [...next.chunks], mediaRecorder: next.rec });
+        scheduleRotate();
+      };
+
+      const clearTimer = () => {
+        if (session.segmentTimer) {
+          clearTimeout(session.segmentTimer);
+          session.segmentTimer = null;
         }
       };
-      
-      mediaRecorder.start(1000);
-      
+
+      const scheduleRotate = () => {
+        clearTimer();
+        session.segmentTimer = setTimeout(() => {
+          rotate().catch((err) => console.error('[recording] segment rotation failed:', err));
+        }, CHUNK_DURATION_MS);
+      };
+
+      session.finalize = async (): Promise<Blob[]> => {
+        clearTimer();
+        await finalizeCurrent();
+        try {
+          stream.getTracks().forEach(track => track.stop());
+        } catch {}
+        return session.completedSegments.slice();
+      };
+
+      chunking = session;
+      scheduleRotate();
+
       set({
-        mediaRecorder,
+        mediaRecorder: first.rec,
         audioChunks: [],
         session: {
           id: Date.now().toString(),
@@ -433,49 +563,50 @@ export const useRecordingStore = create<RecordingState>()((set, get) => ({
     }
   },
   stopRecording: async () => {
-    const { mediaRecorder, audioChunks } = get();
-    
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      return new Promise<Blob | null>((resolve) => {
-        mediaRecorder.onstop = () => {
-          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-          mediaRecorder.stream.getTracks().forEach(track => track.stop());
-          
-          set({
-            session: {
-              ...get().session,
-              status: 'completed',
-              audioBlob,
-            },
-            mediaRecorder: null,
-          });
-          
-          resolve(audioBlob);
-        };
-        
-        mediaRecorder.stop();
-      });
-    }
-    return null;
+    const session = chunking;
+    if (!session) return [];
+    const segments = await session.finalize();
+    chunking = null;
+    // Build a combined blob for any legacy consumers that still read it from the store.
+    const combinedType = segments[0]?.type || 'audio/webm';
+    const combined = segments.length > 0 ? new Blob(segments, { type: combinedType }) : undefined;
+    set({
+      session: {
+        ...get().session,
+        status: 'completed',
+        audioBlob: combined,
+      },
+      mediaRecorder: null,
+    });
+    return segments;
   },
   pauseRecording: () => {
-    const { mediaRecorder } = get();
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-      mediaRecorder.pause();
+    const session = chunking;
+    if (session && session.currentRecorder.state === 'recording') {
+      session.isPaused = true;
+      session.currentRecorder.pause();
       set({ session: { ...get().session, status: 'paused' } });
     }
   },
   resumeRecording: () => {
-    const { mediaRecorder } = get();
-    if (mediaRecorder && mediaRecorder.state === 'paused') {
-      mediaRecorder.resume();
+    const session = chunking;
+    if (session && session.currentRecorder.state === 'paused') {
+      session.isPaused = false;
+      session.currentRecorder.resume();
       set({ session: { ...get().session, status: 'recording' } });
     }
   },
   resetRecording: () => {
-    const { mediaRecorder } = get();
-    if (mediaRecorder) {
-      mediaRecorder.stream.getTracks().forEach(track => track.stop());
+    const session = chunking;
+    if (session) {
+      try {
+        if (session.segmentTimer) clearTimeout(session.segmentTimer);
+        if (session.currentRecorder.state !== 'inactive') {
+          session.currentRecorder.stop();
+        }
+        session.stream.getTracks().forEach(track => track.stop());
+      } catch {}
+      chunking = null;
     }
     set({
       session: { id: '', status: 'idle', duration: 0 },
