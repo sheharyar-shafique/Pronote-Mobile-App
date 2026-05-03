@@ -54,7 +54,6 @@ jobs:
         run: |
           node <<'EOF'
           const fs = require('fs');
-          const path = require('path');
 
           const manifestPath = 'android/app/src/main/AndroidManifest.xml';
           const snippetPath = 'platform-templates/android/AndroidManifest.snippet.xml';
@@ -74,13 +73,22 @@ jobs:
             added++;
           }
 
-          // HIPAA-friendly backup defaults on the <application> tag.
-          if (!/android:allowBackup="false"/.test(manifest)) {
-            manifest = manifest.replace(
-              /<application(\s)/,
-              '<application\n        android:allowBackup="false"\n        android:fullBackupContent="false"$1'
-            );
-          }
+          // HIPAA-friendly backup defaults — REPLACE the existing attributes if Capacitor's
+          // template already declares them (it does), otherwise inject them. Adding a second
+          // android:allowBackup attribute fails the manifest merger with a SAXParseException.
+          const setOrReplace = (attr, value) => {
+            const re = new RegExp(`android:${attr}="[^"]*"`);
+            if (re.test(manifest)) {
+              manifest = manifest.replace(re, `android:${attr}="${value}"`);
+            } else {
+              manifest = manifest.replace(
+                /<application(\s)/,
+                `<application\n        android:${attr}="${value}"$1`
+              );
+            }
+          };
+          setOrReplace('allowBackup', 'false');
+          setOrReplace('fullBackupContent', 'false');
 
           fs.writeFileSync(manifestPath, manifest);
           console.log(`Merged ${added} permission tag(s) into AndroidManifest.xml`);
