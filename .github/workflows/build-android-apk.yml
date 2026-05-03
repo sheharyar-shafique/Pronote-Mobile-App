@@ -1,0 +1,134 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write    # needed to create a Release with the APK attached
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build the web bundle (Vite)
+        run: npm run build
+        env:
+          # Production API URL for the APK build. The mobile WebView calls this.
+          VITE_API_URL: https://pronote-ai-medical-scribe.onrender.com/api
+          VITE_USE_API: 'true'
+
+      - name: Add Android platform (creates android/ project)
+        run: npx cap add android || echo "android/ already exists"
+
+      - name: Sync the web bundle into the Android project
+        run: npx cap sync android
+
+      - name: Merge AndroidManifest permissions from platform-templates
+        run: |
+          node <<'EOF'
+          const fs = require('fs');
+          const path = require('path');
+
+          const manifestPath = 'android/app/src/main/AndroidManifest.xml';
+          const snippetPath = 'platform-templates/android/AndroidManifest.snippet.xml';
+
+          let manifest = fs.readFileSync(manifestPath, 'utf8');
+          const snippet = fs.readFileSync(snippetPath, 'utf8');
+
+          // Pull every <uses-permission .../> and <uses-feature .../> tag out of the snippet.
+          const tagPattern = /<(uses-permission|uses-feature)\s[^>]*\/>/g;
+          const tags = snippet.match(tagPattern) || [];
+
+          // Insert each tag exactly once, just above the <application> tag.
+          let added = 0;
+          for (const tag of tags) {
+            if (manifest.includes(tag)) continue;
+            manifest = manifest.replace(/(\s*)<application/, `\n    ${tag}$1<application`);
+            added++;
+          }
+
+          // HIPAA-friendly backup defaults on the <application> tag.
+          if (!/android:allowBackup="false"/.test(manifest)) {
+            manifest = manifest.replace(
+              /<application(\s)/,
+              '<application\n        android:allowBackup="false"\n        android:fullBackupContent="false"$1'
+            );
+          }
+
+          fs.writeFileSync(manifestPath, manifest);
+          console.log(`Merged ${added} permission tag(s) into AndroidManifest.xml`);
+          EOF
+
+      - name: Copy data_extraction_rules.xml so the manifest reference resolves
+        run: |
+          mkdir -p android/app/src/main/res/xml
+          cp platform-templates/android/data_extraction_rules.xml \
+             android/app/src/main/res/xml/data_extraction_rules.xml || true
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Locate APK
+        id: locate
+        run: |
+          APK=$(find android/app/build/outputs/apk -name "*.apk" | head -1)
+          echo "Found APK at: $APK"
+          ls -la "$APK"
+          echo "apk_path=$APK" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pronote-debug-apk
+          path: ${{ steps.locate.outputs.apk_path }}
+          retention-days: 30
+
+      - name: Publish APK as a GitHub Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Pronote APK build ${{ github.run_number }}
+          body: |
+            Auto-built debug APK from commit ${{ github.sha }}.
+
+            Install on Android:
+            1. Download `app-debug.apk` below.
+            2. Open it on your phone.
+            3. Approve "install from this source" if prompted.
+
+            This is a debug build — fine for testing, not for the Play Store.
+          files: ${{ steps.locate.outputs.apk_path }}
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
