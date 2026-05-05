@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Pronote Medical Scribe — full-logo source. Used for the splash screen
+  and any in-app branding. The icon-only variant (no text) is rendered
+  separately in icon-source.svg so phone home screens stay readable.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Solid sage / forest green backdrop matching the original logo -->
+  <rect width="1024" height="1024" fill="#516451"/>
+
+  <!-- Two broken white circles (a halo of four arc segments). Drawn as
+       dashed strokes on transparent fills so we get the broken-ring effect. -->
+  <g fill="none" stroke="#ffffff" stroke-linecap="round">
+    <circle cx="512" cy="512" r="380" stroke-width="5"
+            stroke-dasharray="380 100 380 100" stroke-dashoffset="60"/>
+    <circle cx="512" cy="512" r="345" stroke-width="3"
+            stroke-dasharray="180 700 180 700" stroke-dashoffset="-180"/>
+  </g>
+
+  <!-- Medical cross: bright green outline with a white interior + a stylised
+       pulse line through the centre, matching the source logo. -->
+  <g transform="translate(512 530)">
+    <!-- Cross shape: thick green stroke, white fill -->
+    <path d="
+      M -85 -180  L 85 -180
+      L 85 -85   L 180 -85
+      L 180 85   L 85 85
+      L 85 180   L -85 180
+      L -85 85   L -180 85
+      L -180 -85 L -85 -85
+      Z"
+      fill="#ffffff" stroke="#5CB85C" stroke-width="20" stroke-linejoin="round"/>
+
+    <!-- Stylised pulse / EKG line bisecting the cross -->
+    <polyline points="-150,0 -75,0 -45,-50 -10,40 30,-40 60,0 150,0"
+              fill="none" stroke="#5CB85C" stroke-width="14"
+              stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Top text: PRONOTE -->
+  <text x="512" y="200"
+        text-anchor="middle"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="78" font-weight="400" letter-spacing="14"
+        fill="#5CB85C">PRONOTE</text>
+
+  <!-- Bottom text: MEDICAL SCRIBE, curved along the lower arc -->
+  <defs>
+    <path id="bottomArc" d="M 200 720 A 320 320 0 0 0 824 720"/>
+  </defs>
+  <text font-family="Georgia, 'Times New Roman', serif"
+        font-size="58" letter-spacing="10"
+        fill="#5CB85C">
+    <textPath xlink:href="#bottomArc" startOffset="50%" text-anchor="middle">
+      MEDICAL SCRIBE
+    </textPath>
+  </text>
+</svg>

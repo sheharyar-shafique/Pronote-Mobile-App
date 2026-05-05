@@ -50,6 +50,19 @@ jobs:
       - name: Sync the web bundle into the Android project
         run: npx cap sync android
 
+      - name: Generate app icons + splash screens from resources/
+        # @capacitor/assets reads resources/icon.png + resources/splash.png and
+        # produces every iOS / Android icon & splash size into the platform
+        # projects. Re-runs every build so the icon stays in sync with the
+        # PNGs committed to the repo.
+        run: |
+          npx @capacitor/assets generate \
+            --android \
+            --iconBackgroundColor '#516451' \
+            --iconBackgroundColorDark '#516451' \
+            --splashBackgroundColor '#516451' \
+            --splashBackgroundColorDark '#516451'
+
       - name: Merge AndroidManifest permissions from platform-templates
         run: |
           node <<'EOF'

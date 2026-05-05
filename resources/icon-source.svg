@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Pronote — app-icon source. No text (Apple HIG: text in icons is unreadable
+  at small sizes). The full PRONOTE / MEDICAL SCRIBE wordmark lives in
+  logo-source.svg for the splash screen and login page.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Solid sage / forest green backdrop matching the brand logo -->
+  <rect width="1024" height="1024" fill="#516451"/>
+
+  <!-- Broken-ring halo: two concentric dashed circles in white -->
+  <g fill="none" stroke="#ffffff" stroke-linecap="round">
+    <circle cx="512" cy="512" r="430" stroke-width="6"
+            stroke-dasharray="500 130 500 130" stroke-dashoffset="80"/>
+    <circle cx="512" cy="512" r="385" stroke-width="3"
+            stroke-dasharray="220 850 220 850" stroke-dashoffset="-220"/>
+  </g>
+
+  <!-- Medical cross — larger and centred since there's no text competing
+       for vertical space. White interior, bright-green outline + pulse line. -->
+  <g transform="translate(512 512)">
+    <path d="
+      M -110 -240  L 110 -240
+      L 110 -110   L 240 -110
+      L 240 110    L 110 110
+      L 110 240    L -110 240
+      L -110 110   L -240 110
+      L -240 -110  L -110 -110
+      Z"
+      fill="#ffffff" stroke="#5CB85C" stroke-width="26" stroke-linejoin="round"/>
+
+    <polyline points="-200,0 -100,0 -60,-66 -14,52 40,-52 80,0 200,0"
+              fill="none" stroke="#5CB85C" stroke-width="18"
+              stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
