@@ -19,6 +19,7 @@ import { useNotesStore, useSettingsStore } from '../store';
 import { templates } from '../data';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
+import { hapticLight, hapticHeavy, hapticSuccess, hapticError } from '../native/native-ux';
 import type { ClinicalNote, NoteContent, Template } from '../types';
 import { getAuthToken } from '../services/api';
 
@@ -134,20 +135,23 @@ export default function NoteEditorPage() {
 
   const handleSave = async () => {
     if (!note) return;
-    
+
+    void hapticLight(); // small tap to confirm the touch landed
     setIsSaving(true);
     try {
       await new Promise(resolve => setTimeout(resolve, 500));
-      
+
       if (getNoteById(note.id)) {
         updateNote(note.id, { content, updatedAt: new Date() });
       } else {
         addNote({ ...note, content });
       }
-      
+
       setHasChanges(false);
+      void hapticSuccess();
       toast.success('Note saved successfully');
     } catch (error) {
+      void hapticError();
       toast.error('Failed to save note');
     } finally {
       setIsSaving(false);
@@ -156,11 +160,12 @@ export default function NoteEditorPage() {
 
   const handleSign = async () => {
     if (!note) return;
-    
+
     await handleSave();
     updateNote(note.id, { status: 'signed' });
     setNote(prev => prev ? { ...prev, status: 'signed' } : null);
     setShowSignModal(false);
+    void hapticSuccess(); // signing is the highest-stakes action — give a clear confirmation buzz
     toast.success('Note signed and finalized');
   };
 
@@ -168,9 +173,11 @@ export default function NoteEditorPage() {
     if (!note) return;
     try {
       await deleteNote(note.id);
+      void hapticHeavy();
       toast.success('Note deleted');
       navigate('/notes');
     } catch {
+      void hapticError();
       toast.error('Failed to delete note');
     }
   };

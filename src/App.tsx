@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster, toast } from 'react-hot-toast';
 import { useAuthStore } from './store';
 import { authApi } from './services/api';
+import { onAppStateChange, getLastBackgroundTimestamp } from './native/native-ux';
+import { isIOS } from './native/platform';
 import {
   LandingPage,
   LoginPage,
@@ -113,6 +115,33 @@ function App() {
     };
   }, [isAuthenticated, resetTimer]);
 
+  // HIPAA: also enforce inactivity timeout across native app background/foreground
+  // transitions. The in-process setTimeout above doesn't fire while the OS has the
+  // app suspended, so when the user comes back we check how long it was backgrounded.
+  // This is the "did you leave your phone on the table for an hour?" case.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const unsubscribe = onAppStateChange((state) => {
+      if (state.isActive) {
+        const backgroundedAt = getLastBackgroundTimestamp();
+        if (backgroundedAt && Date.now() - backgroundedAt >= SESSION_TIMEOUT_MS) {
+          logout();
+          toast.error('Session expired while the app was in the background. Please log in again.', {
+            duration: 5000,
+          });
+        } else {
+          // App is back in the foreground — restart the inactivity timer.
+          resetTimer();
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [isAuthenticated, logout, resetTimer]);
+
   // HIPAA: Proactive token refresh (refresh at 23h to avoid expiry mid-session)
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -160,7 +189,14 @@ function App() {
       />
       <Routes>
         {/* Public Routes */}
-        <Route path="/" element={<LandingPage />} />
+        {/*
+          On iOS we skip the marketing LandingPage entirely. It contains pricing
+          tiers and Stripe-based "Start Free Trial" CTAs which violate Apple's
+          anti-steering rules (Guideline 3.1.1). Sending iOS users straight to
+          /login keeps the install flow legal and doesn't waste reviewer time
+          on marketing copy. Web users still see the full landing page.
+        */}
+        <Route path="/" element={isIOS() ? <Navigate to="/login" replace /> : <LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />

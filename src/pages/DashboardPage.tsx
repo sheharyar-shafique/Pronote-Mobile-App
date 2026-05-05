@@ -10,6 +10,7 @@ import { Sidebar } from '../components/layout';
 import { useAuthStore, useNotesStore } from '../store';
 import { format } from 'date-fns';
 import { dashboardApi, DashboardStats, Appointment } from '../services/api';
+import { isIOS } from '../native/platform';
 
 const stagger = {
   hidden: { opacity: 0 },
@@ -263,17 +264,29 @@ export default function DashboardPage() {
                   </div>
                 )}
 
-                {/* Trial banner if on trial */}
+                {/*
+                  Trial banner. On iOS we show a neutral "trial active" notice without
+                  any "Upgrade" / "Choose a Plan" CTA, because Apple's anti-steering
+                  rules forbid in-app prompts that link to external paid signups.
+                */}
                 {user?.subscriptionStatus === 'trial' && (
                   <div className="m-4 p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 to-teal-500/5 border border-emerald-500/20">
                     <p className="text-xs font-bold text-emerald-400 mb-1">🎉 Trial Active</p>
-                    <p className="text-xs text-slate-400 mb-3">Your free trial ends soon. Upgrade to keep your access.</p>
-                    <Link to="/settings">
-                      <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
-                        className="w-full py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-emerald-500/25">
-                        Choose a Plan →
-                      </motion.button>
-                    </Link>
+                    {isIOS() ? (
+                      <p className="text-xs text-slate-400">
+                        You're on the free trial. Manage your subscription on the web at pronoteai.com.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-xs text-slate-400 mb-3">Your free trial ends soon. Upgrade to keep your access.</p>
+                        <Link to="/settings">
+                          <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+                            className="w-full py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-xs font-bold rounded-lg shadow-lg shadow-emerald-500/25">
+                            Choose a Plan →
+                          </motion.button>
+                        </Link>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

@@ -21,6 +21,7 @@ import { Card, Button, Input, Toggle, Select, Modal } from '../components/ui';
 import { useAuthStore, useSettingsStore } from '../store';
 import { templates, specialties, pricingPlans } from '../data';
 import { subscriptionsApi, authApi, usersApi } from '../services/api';
+import { isIOS } from '../native/platform';
 import toast from 'react-hot-toast';
 import { useNavigate, Link } from 'react-router-dom';
 
@@ -351,12 +352,26 @@ export default function SettingsPage() {
                 ) : null;
               })()}
 
-              <button
-                className="w-full py-2 border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
-                onClick={() => setShowUpgradeModal(true)}
-              >
-                <CreditCard size={14} /> Upgrade Plan
-              </button>
+              {/*
+                Apple App Review Guideline 3.1.1: digital subscriptions sold inside
+                the iOS app must use Apple's IAP. We sell subscriptions on the web
+                via Stripe, so on iOS we hide the Upgrade button and instead point
+                users to the website. The current-plan info above is still shown
+                because that's allowed (account management).
+              */}
+              {isIOS() ? (
+                <p className="text-xs text-slate-400 text-center mt-2 leading-relaxed">
+                  Manage your subscription on the web at{' '}
+                  <span className="text-emerald-400 font-semibold">pronoteai.com</span>.
+                </p>
+              ) : (
+                <button
+                  className="w-full py-2 border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 rounded-xl text-sm font-bold transition-all flex items-center justify-center gap-2"
+                  onClick={() => setShowUpgradeModal(true)}
+                >
+                  <CreditCard size={14} /> Upgrade Plan
+                </button>
+              )}
             </div>
           </motion.div>
 
@@ -555,8 +570,9 @@ export default function SettingsPage() {
           </motion.div>
         </div>
 
-        {/* Upgrade Modal */}
-        <Modal isOpen={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} title="Choose Your Plan" size="full">
+        {/* Upgrade Modal — never rendered on iOS (Apple anti-steering: no pricing,
+            no purchase buttons, no Stripe flows allowed inside the iOS app). */}
+        <Modal isOpen={showUpgradeModal && !isIOS()} onClose={() => setShowUpgradeModal(false)} title="Choose Your Plan" size="full">
 
           {/* Verifying PayPal banner */}
           {isVerifyingPayPal && (

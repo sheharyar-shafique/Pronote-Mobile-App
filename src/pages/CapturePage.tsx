@@ -20,6 +20,7 @@ import { Card, Select } from '../components/ui';
 import { useRecordingStore, useNotesStore, useSettingsStore } from '../store';
 import { templates as allBuiltInTemplates } from '../data';
 import { audioApi, notesApi, templatesApi } from '../services/api';
+import { hapticMedium, hapticHeavy, hapticSuccess, hapticError } from '../native/native-ux';
 import toast from 'react-hot-toast';
 import type { ClinicalNote, Template } from '../types';
 
@@ -168,15 +169,19 @@ export default function CapturePage() {
     }
     try {
       await startRecording();
+      // Native haptic — confirms the start of recording on iOS / Android.
+      void hapticMedium();
       toast.success('Recording started - speak clearly');
     } catch (error) {
+      void hapticError();
       toast.error('Failed to access microphone. Please check permissions.');
     }
   };
 
   const handleStopRecording = async () => {
-    // Enforce minimum 30-second recording
+    // Enforce minimum recording length
     if (!meetsMinDuration) {
+      void hapticError();
       setShakingStop(true);
       setTimeout(() => setShakingStop(false), 600);
       toast.error(`Please record for at least ${MIN_RECORDING_SECONDS} seconds. ${remainingSeconds}s remaining.`, {
@@ -185,6 +190,7 @@ export default function CapturePage() {
       });
       return;
     }
+    void hapticHeavy(); // commit-style buzz: stopping the recording is a high-stakes action
     setIsProcessing(true);
     try {
       // Long recordings are auto-segmented by the recorder into <=10-min chunks so each
@@ -298,6 +304,7 @@ export default function CapturePage() {
         };
         
         addNote(newNote);
+        void hapticSuccess();
         toast.success('Note generated successfully!');
         navigate(`/notes/${newNote.id}`);
       }
