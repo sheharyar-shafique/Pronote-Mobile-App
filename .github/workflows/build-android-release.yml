@@ -1,0 +1,194 @@
+name: Build Android Release AAB
+
+# Builds a release-signed Android App Bundle (.aab) for Play Store upload.
+# Triggered on demand (or on tags) — separate from the debug APK workflow so
+# every push doesn't burn signing credentials on a build no one will publish.
+#
+# Required GitHub repo secrets (Settings → Secrets and variables → Actions):
+#   ANDROID_KEYSTORE_BASE64   base64 of pronote-release.jks
+#   ANDROID_KEYSTORE_PASSWORD storepass for the keystore
+#   ANDROID_KEY_ALIAS         alias used during keytool generation (e.g. pronote-release)
+#   ANDROID_KEY_PASSWORD      keypass for that alias
+
+on:
+  push:
+    tags: ['v*.*.*']             # auto-build on version tags like v1.0.0
+  workflow_dispatch:              # also runnable manually from the Actions tab
+
+permissions:
+  contents: write    # needed to attach the AAB to a Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-34 build-tools;34.0.0 platform-tools'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build the web bundle (Vite)
+        run: npm run build
+        env:
+          VITE_API_URL: https://pronote-ai-medical-scribe.onrender.com/api
+          VITE_USE_API: 'true'
+
+      - name: Add Android platform
+        run: npx cap add android || echo "android/ already exists"
+
+      - name: Sync the web bundle into the Android project
+        run: npx cap sync android
+
+      - name: Generate app icons + splash screens from resources/
+        run: |
+          npx @capacitor/assets generate \
+            --android \
+            --iconBackgroundColor '#516451' \
+            --iconBackgroundColorDark '#516451' \
+            --splashBackgroundColor '#516451' \
+            --splashBackgroundColorDark '#516451'
+
+      - name: Merge AndroidManifest permissions from platform-templates
+        run: |
+          node <<'EOF'
+          const fs = require('fs');
+          const manifestPath = 'android/app/src/main/AndroidManifest.xml';
+          const snippetPath = 'platform-templates/android/AndroidManifest.snippet.xml';
+          let manifest = fs.readFileSync(manifestPath, 'utf8');
+          const snippet = fs.readFileSync(snippetPath, 'utf8');
+          const tagPattern = /<(uses-permission|uses-feature)\s[^>]*\/>/g;
+          const tags = snippet.match(tagPattern) || [];
+          let added = 0;
+          for (const tag of tags) {
+            if (manifest.includes(tag)) continue;
+            manifest = manifest.replace(/(\s*)<application/, `\n    ${tag}$1<application`);
+            added++;
+          }
+          const setOrReplace = (attr, value) => {
+            const re = new RegExp(`android:${attr}="[^"]*"`);
+            if (re.test(manifest)) {
+              manifest = manifest.replace(re, `android:${attr}="${value}"`);
+            } else {
+              manifest = manifest.replace(/<application(\s)/,
+                `<application\n        android:${attr}="${value}"$1`);
+            }
+          };
+          setOrReplace('allowBackup', 'false');
+          setOrReplace('fullBackupContent', 'false');
+          fs.writeFileSync(manifestPath, manifest);
+          console.log(`Merged ${added} permission tag(s)`);
+          EOF
+
+      - name: Copy data_extraction_rules.xml so the manifest reference resolves
+        run: |
+          mkdir -p android/app/src/main/res/xml
+          cp platform-templates/android/data_extraction_rules.xml \
+             android/app/src/main/res/xml/data_extraction_rules.xml || true
+
+      - name: Decode keystore from secret
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is not set. Generate the keystore first (see scripts/generate-keystore.md)."
+            exit 1
+          fi
+          mkdir -p android/app
+          echo "$KEYSTORE_B64" | base64 -d > android/app/pronote-release.jks
+          # Verify the file is valid (keytool -list returns 0 if so)
+          keytool -list -keystore android/app/pronote-release.jks \
+            -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            >/dev/null
+          echo "Keystore decoded successfully."
+
+      - name: Inject release signing config into Gradle
+        # Capacitor's android template doesn't have a release signing block by
+        # default. Append one that reads from the secrets we just decoded above.
+        run: |
+          cat >> android/app/build.gradle <<'EOF'
+
+          android {
+              signingConfigs {
+                  release {
+                      storeFile     file('pronote-release.jks')
+                      storePassword System.getenv('PRONOTE_KEYSTORE_PASSWORD')
+                      keyAlias      System.getenv('PRONOTE_KEY_ALIAS')
+                      keyPassword   System.getenv('PRONOTE_KEY_PASSWORD')
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                      minifyEnabled false
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                  }
+              }
+          }
+          EOF
+
+      - name: Build release AAB
+        working-directory: android
+        env:
+          PRONOTE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          PRONOTE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          PRONOTE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew bundleRelease --no-daemon --stacktrace
+
+      - name: Locate AAB
+        id: locate
+        run: |
+          AAB=$(find android/app/build/outputs/bundle/release -name "*.aab" | head -1)
+          echo "Found AAB at: $AAB"
+          ls -la "$AAB"
+          echo "aab_path=$AAB" >> "$GITHUB_OUTPUT"
+
+      - name: Upload AAB as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pronote-release-aab
+          path: ${{ steps.locate.outputs.aab_path }}
+          retention-days: 90
+
+      - name: Publish AAB as a GitHub Release (only on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Pronote Android ${{ github.ref_name }}
+          body: |
+            Production-signed Android App Bundle for Play Store upload.
+
+            **Upload steps**:
+            1. Download `app-release.aab` below.
+            2. Go to Play Console → your app → Production (or Internal testing).
+            3. Click "Create new release" → upload the AAB.
+            4. Add release notes.
+            5. Submit for review.
+
+            Built from commit ${{ github.sha }}.
+          files: ${{ steps.locate.outputs.aab_path }}
+          make_latest: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
