@@ -20,11 +20,18 @@ import { Card, Select } from '../components/ui';
 import { useRecordingStore, useNotesStore, useSettingsStore } from '../store';
 import { templates as allBuiltInTemplates } from '../data';
 import { audioApi, notesApi, templatesApi } from '../services/api';
-import { hapticMedium, hapticHeavy, hapticSuccess, hapticError } from '../native/native-ux';
 import toast from 'react-hot-toast';
 import type { ClinicalNote, Template } from '../types';
 
 const MIN_RECORDING_SECONDS = 20;
+// Hard cap on a single recording session. Mental-health and similar long-form
+// visits run 1-2 hours; anything beyond that risks browser memory pressure on
+// older mobile devices and is almost always an unintentional "left it running"
+// rather than a real visit. We auto-stop at exactly this point and process
+// whatever was captured up to then.
+const MAX_RECORDING_SECONDS = 2 * 60 * 60; // 7200 = 2 hours
+// Warn the user this many seconds before the hard cap fires.
+const MAX_WARNING_LEAD_SECONDS = 5 * 60;   // 5-minute warning before auto-stop
 
 export default function CapturePage() {
   const navigate = useNavigate();
@@ -124,14 +131,48 @@ export default function CapturePage() {
   const resolvedTemplate =
     myTemplates.find(t => t.id === selectedTemplate) ?? myTemplates[0];
 
+  // Track whether the user has already seen the "5 minutes left" warning so we
+  // don't spam it every second once they cross the threshold.
+  const warnedNearMaxRef = useRef(false);
+
   useEffect(() => {
     if (session.status === 'recording') {
       intervalRef.current = setInterval(() => {
-        setDuration(session.duration + 1);
+        const next = session.duration + 1;
+
+        // Soft warning: 5 minutes before the hard cap fires.
+        if (
+          next === MAX_RECORDING_SECONDS - MAX_WARNING_LEAD_SECONDS &&
+          !warnedNearMaxRef.current
+        ) {
+          warnedNearMaxRef.current = true;
+          toast(
+            'Recording will auto-stop in 5 minutes (2-hour maximum). Wrap up when you can.',
+            { icon: '⏰', duration: 6000 }
+          );
+        }
+
+        // Hard cap: auto-stop the recording exactly at 2 hours.
+        if (next >= MAX_RECORDING_SECONDS) {
+          toast.success('2-hour limit reached — processing the recording now.', {
+            icon: '⏰',
+            duration: 4000,
+          });
+          // Trigger the same path the user would by tapping "Stop", so the
+          // recording is segmented + transcribed + a note is generated.
+          handleStopRecording();
+          return;
+        }
+
+        setDuration(next);
       }, 1000);
     } else {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+      }
+      // Reset the warning flag so the next session starts fresh.
+      if (session.status === 'idle' || session.status === 'completed') {
+        warnedNearMaxRef.current = false;
       }
     }
     return () => {
@@ -139,6 +180,7 @@ export default function CapturePage() {
         clearInterval(intervalRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.status, session.duration, setDuration]);
 
   // Close patient dropdown on outside click
@@ -169,19 +211,15 @@ export default function CapturePage() {
     }
     try {
       await startRecording();
-      // Native haptic — confirms the start of recording on iOS / Android.
-      void hapticMedium();
       toast.success('Recording started - speak clearly');
     } catch (error) {
-      void hapticError();
       toast.error('Failed to access microphone. Please check permissions.');
     }
   };
 
   const handleStopRecording = async () => {
-    // Enforce minimum recording length
+    // Enforce minimum 30-second recording
     if (!meetsMinDuration) {
-      void hapticError();
       setShakingStop(true);
       setTimeout(() => setShakingStop(false), 600);
       toast.error(`Please record for at least ${MIN_RECORDING_SECONDS} seconds. ${remainingSeconds}s remaining.`, {
@@ -190,7 +228,6 @@ export default function CapturePage() {
       });
       return;
     }
-    void hapticHeavy(); // commit-style buzz: stopping the recording is a high-stakes action
     setIsProcessing(true);
     try {
       // Long recordings are auto-segmented by the recorder into <=10-min chunks so each
@@ -304,7 +341,6 @@ export default function CapturePage() {
         };
         
         addNote(newNote);
-        void hapticSuccess();
         toast.success('Note generated successfully!');
         navigate(`/notes/${newNote.id}`);
       }
