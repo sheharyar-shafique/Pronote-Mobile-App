@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Play Store feature graphic — banner displayed at the top of the Pronote
+  listing on the Play Store. 1024×500 is the only required dimension.
+  Same brand palette as the app icon (sage green + bright green accent +
+  white) and the same medical-cross motif so the listing reads as a
+  cohesive identity.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     viewBox="0 0 1024 500" width="1024" height="500">
+
+  <!-- Sage-green base, with a subtle radial highlight to keep it from looking flat -->
+  <defs>
+    <radialGradient id="bgGrad" cx="80%" cy="40%" r="80%">
+      <stop offset="0%"  stop-color="#5e7257"/>
+      <stop offset="100%" stop-color="#465540"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="500" fill="url(#bgGrad)"/>
+
+  <!-- Decorative broken circles around the cross, mirrored from the app icon -->
+  <g transform="translate(820 250)" fill="none" stroke="#ffffff" stroke-linecap="round">
+    <circle r="200" stroke-width="3" stroke-dasharray="240 90 240 90" stroke-dashoffset="40"/>
+    <circle r="180" stroke-width="2" stroke-dasharray="120 380 120 380" stroke-dashoffset="-100"/>
+  </g>
+
+  <!-- Medical cross + EKG pulse line — anchored on the right side of the banner -->
+  <g transform="translate(820 250)">
+    <path d="
+      M -55 -120  L 55 -120
+      L 55 -55   L 120 -55
+      L 120 55   L 55 55
+      L 55 120   L -55 120
+      L -55 55   L -120 55
+      L -120 -55 L -55 -55
+      Z"
+      fill="#ffffff" stroke="#5CB85C" stroke-width="14" stroke-linejoin="round"/>
+    <polyline points="-100,0 -50,0 -30,-30 -8,30 18,-30 38,0 100,0"
+              fill="none" stroke="#5CB85C" stroke-width="9"
+              stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Wordmark + tagline on the left -->
+  <text x="80" y="220"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="92" font-weight="700"
+        fill="#ffffff" letter-spacing="2">Pronote</text>
+
+  <text x="80" y="280"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="32" font-weight="400"
+        fill="#5CB85C" letter-spacing="6">AI MEDICAL SCRIBE</text>
+
+  <!-- Single-line value proposition -->
+  <text x="80" y="370"
+        font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-size="22" font-weight="400"
+        fill="rgba(255,255,255,0.85)">Voice → structured clinical notes in seconds.</text>
+  <text x="80" y="402"
+        font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-size="22" font-weight="400"
+        fill="rgba(255,255,255,0.85)">SOAP · Psychiatric · Therapy · Pediatric · 30+ templates.</text>
+</svg>
