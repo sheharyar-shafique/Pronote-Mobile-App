@@ -17,9 +17,14 @@
 <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-<!-- File / media access for uploads (Android 13+ uses scoped media perms) -->
+<!-- File / media access for uploads (Android 13+ uses scoped media perms).
+     Pronote ONLY accepts audio uploads (accept="audio/*" in UploadPage), so we
+     declare READ_MEDIA_AUDIO and nothing else. READ_MEDIA_IMAGES /
+     READ_MEDIA_VIDEO are intentionally NOT declared — they would trigger
+     Play Console's "Photo and video permissions" justification step without
+     any user-visible benefit, and the app would fail policy review since
+     there is no image flow to justify. -->
 <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
 
 <!-- Push notifications (Android 13+) -->
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
