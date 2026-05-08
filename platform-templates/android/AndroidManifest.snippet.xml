@@ -27,10 +27,17 @@
 <!-- Biometric auth -->
 <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
-<!-- Camera (for document scanning into patient records) -->
-<uses-permission android:name="android.permission.CAMERA" />
-<uses-feature android:name="android.hardware.camera" android:required="false" />
+<!-- Microphone is the only audio input we use; declare as a hardware feature
+     (required:true means devices without a mic — like some tablets — won't see
+     the app on Play Store, which is correct for a dictation app). -->
 <uses-feature android:name="android.hardware.microphone" android:required="true" />
+
+<!-- Camera permission INTENTIONALLY NOT DECLARED. The app currently doesn't
+     use the camera anywhere. Adding android.permission.CAMERA to the manifest
+     triggers Play Store's "permissions that require a privacy policy" warning
+     and increases scrutiny without any user-visible benefit. If we later add
+     image-attachment-from-camera, declare it here AND fill out the Play
+     Console "Sensitive permissions" justification at the same time. -->
 
 <!--
   Inside the <application> tag, also set:
