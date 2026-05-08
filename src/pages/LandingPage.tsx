@@ -36,7 +36,10 @@ export default function LandingPage() {
     <div className="min-h-screen bg-white overflow-x-hidden">
 
       {/* ── Navbar ─────────────────────────────── */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-xl border-b border-white/[0.07]">
+      <header
+        className="fixed top-0 left-0 right-0 z-50 bg-slate-900/80 backdrop-blur-xl border-b border-white/[0.07]"
+        style={{ paddingTop: 'var(--safe-top)' }}
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
 
           {/* Logo */}
@@ -109,7 +112,7 @@ export default function LandingPage() {
       </header>
 
       {/* ── Hero ───────────────────────────────── */}
-      <section className="relative min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center pt-16 overflow-hidden">
+      <section className="relative lg:min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 lg:flex lg:items-center pt-16 overflow-hidden">
         {/* Background glows */}
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-20 left-[10%] w-96 h-96 bg-emerald-500/20 rounded-full blur-3xl" />
@@ -120,8 +123,8 @@ export default function LandingPage() {
             style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.5) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
         </div>
 
-        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 w-full">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-12 lg:py-20 w-full">
+          <div className="grid lg:grid-cols-2 gap-16 lg:items-center">
             {/* Left */}
             <motion.div initial={{ opacity: 0, x: -40 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.7 }}>
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
