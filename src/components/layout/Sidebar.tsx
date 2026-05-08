@@ -263,7 +263,13 @@ export default function Sidebar({ children }: SidebarProps) {
   return (
     <div className="flex min-h-screen bg-slate-50 overflow-x-hidden">
       {/* Mobile Top Bar */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-white/10 px-4 py-3">
+      <div
+        className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-white/10 px-4"
+        style={{
+          paddingTop: 'calc(var(--safe-top) + 0.75rem)',
+          paddingBottom: '0.75rem',
+        }}
+      >
         <div className="flex items-center justify-between">
           <Link to="/dashboard" className="flex items-center gap-2.5">
             <div className="w-8 h-8 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-lg flex items-center justify-center">
@@ -345,7 +351,10 @@ export default function Sidebar({ children }: SidebarProps) {
         initial={false}
         animate={{ marginLeft: isDesktop ? (isCollapsed ? 72 : 256) : 0 }}
         transition={{ duration: 0.3, ease: 'easeInOut' }}
-        className="flex-1 mt-16 lg:mt-0 min-h-screen w-full max-w-full overflow-x-hidden bg-[#080f14]"
+        className="flex-1 lg:mt-0 min-h-screen w-full max-w-full overflow-x-hidden bg-[#080f14]"
+        style={{
+          marginTop: isDesktop ? 0 : 'calc(var(--safe-top) + 4rem)',
+        }}
       >
         {children}
       </motion.main>

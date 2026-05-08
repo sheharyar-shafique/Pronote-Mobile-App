@@ -6,14 +6,23 @@
   html {
     scroll-behavior: smooth;
   }
-  
+
   body {
     @apply antialiased;
   }
-  
+
   * {
     @apply border-gray-200;
   }
+}
+
+/* Safe-area inset variables — populated automatically inside Capacitor WebView
+   (Android status bar / iOS notch). Falls back to 0 in normal browsers. */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }
 
 @layer components {
