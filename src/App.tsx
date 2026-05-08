@@ -30,6 +30,7 @@ import {
   SubscriptionLockedPage,
   TermsPage,
   PrivacyPage,
+  DeleteAccountPage,
   EnterprisePage,
 } from './pages';
 
@@ -202,6 +203,7 @@ function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/delete-account" element={<DeleteAccountPage />} />
         
         {/* Subscription Locked Route */}
         <Route
