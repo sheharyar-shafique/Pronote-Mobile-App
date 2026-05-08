@@ -62,7 +62,7 @@ export default function DeleteAccountPage() {
 
           <Section title="Method 1 — Delete from inside the app">
             <ol className="list-decimal list-inside space-y-2 ml-2">
-              <li>Open Pronote on your device or sign in at <a href="/login" className="text-emerald-400 hover:underline">pronote.app/login</a>.</li>
+              <li>Open Pronote on your device or sign in at <a href="/login" className="text-emerald-400 hover:underline">pronoteai.com/login</a>.</li>
               <li>Open <strong className="text-white">Settings</strong> from the sidebar.</li>
               <li>Scroll to <strong className="text-white">Danger zone</strong> at the bottom of the page.</li>
               <li>Click <strong className="text-white">Delete account</strong>.</li>
@@ -75,8 +75,8 @@ export default function DeleteAccountPage() {
             <p>If you cannot sign in to your account, send a deletion request from the email address associated with your Pronote account:</p>
             <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-xl p-4 mt-3 flex items-center gap-3">
               <Mail size={18} className="text-emerald-400 flex-shrink-0" />
-              <a href="mailto:support@pronote.app?subject=Account%20deletion%20request" className="text-emerald-300 font-mono text-sm hover:underline">
-                support@pronote.app
+              <a href="mailto:support@pronoteai.com?subject=Account%20deletion%20request" className="text-emerald-300 font-mono text-sm hover:underline">
+                support@pronoteai.com
               </a>
             </div>
             <p className="mt-3">Subject: <em>Account deletion request</em></p>
@@ -104,7 +104,7 @@ export default function DeleteAccountPage() {
           </Section>
 
           <Section title="Need help?">
-            <p>If you have any questions about deletion, data retention, or your privacy rights as a Pronote user, contact our privacy team at <a href="mailto:support@pronote.app" className="text-emerald-400 hover:underline">support@pronote.app</a>.</p>
+            <p>If you have any questions about deletion, data retention, or your privacy rights as a Pronote user, contact our privacy team at <a href="mailto:support@pronoteai.com" className="text-emerald-400 hover:underline">support@pronoteai.com</a>.</p>
             <p>For more information about how we handle your data, see our <Link to="/privacy" className="text-emerald-400 hover:underline">Privacy Policy</Link>.</p>
           </Section>
 
