@@ -59,6 +59,20 @@ jobs:
       - name: Sync the web bundle into the Android project
         run: npx cap sync android
 
+      - name: Bump versionCode + versionName so Play Console accepts re-uploads
+        # Capacitor scaffolds android/ with versionCode 1 every run, so without
+        # this every AAB collides with the first one Play Console saw and gets
+        # rejected. Use github.run_number — strictly increasing, monotonic, and
+        # reset-proof for the lifetime of the repo.
+        run: |
+          GRADLE=android/app/build.gradle
+          NEW_CODE=${{ github.run_number }}
+          NEW_NAME="1.0.${{ github.run_number }}"
+          sed -i "s/versionCode [0-9]\+/versionCode $NEW_CODE/" "$GRADLE"
+          sed -i "s/versionName \"[^\"]*\"/versionName \"$NEW_NAME\"/" "$GRADLE"
+          echo "Patched $GRADLE:"
+          grep -E "versionCode|versionName" "$GRADLE"
+
       - name: Generate app icons + splash screens from resources/
         run: |
           npx @capacitor/assets generate \
