@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.pronote.clinical',
+  appId: 'com.pronoteai.scribe',
   appName: 'Pronote',
   webDir: 'dist',
   bundledWebRuntime: false,

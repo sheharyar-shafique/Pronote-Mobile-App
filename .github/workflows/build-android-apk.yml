@@ -113,16 +113,65 @@ jobs:
           cp platform-templates/android/data_extraction_rules.xml \
              android/app/src/main/res/xml/data_extraction_rules.xml || true
 
-      - name: Build debug APK
+      - name: Decode keystore from secret
+        # Sign every APK from this workflow with the SAME release keystore the
+        # production AAB uses. This is critical: previously, this workflow used
+        # Gradle's auto-generated debug keystore, whose fingerprint got
+        # registered with Google for the old com.pronote.clinical package name.
+        # That ate the package name (we couldn't verify ownership). Using the
+        # release keystore here means every APK out of CI shares the registered
+        # fingerprint, so this contamination cannot happen again.
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is not set."
+            exit 1
+          fi
+          mkdir -p android/app
+          echo "$KEYSTORE_B64" | base64 -d > android/app/pronote-release.jks
+          keytool -list -keystore android/app/pronote-release.jks \
+            -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
+            >/dev/null
+          echo "Keystore decoded successfully."
+
+      - name: Inject release signing config into Gradle
+        run: |
+          cat >> android/app/build.gradle <<'EOF'
+
+          android {
+              signingConfigs {
+                  release {
+                      storeFile     file('pronote-release.jks')
+                      storePassword System.getenv('PRONOTE_KEYSTORE_PASSWORD')
+                      keyAlias      System.getenv('PRONOTE_KEY_ALIAS')
+                      keyPassword   System.getenv('PRONOTE_KEY_PASSWORD')
+                  }
+              }
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.release
+                      minifyEnabled false
+                      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+                  }
+              }
+          }
+          EOF
+
+      - name: Build release-signed APK
         working-directory: android
+        env:
+          PRONOTE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          PRONOTE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          PRONOTE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Locate APK
         id: locate
         run: |
-          APK=$(find android/app/build/outputs/apk -name "*.apk" | head -1)
+          APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
           echo "Found APK at: $APK"
           ls -la "$APK"
           echo "apk_path=$APK" >> "$GITHUB_OUTPUT"
@@ -130,7 +179,7 @@ jobs:
       - name: Upload APK as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pronote-debug-apk
+          name: pronote-release-apk
           path: ${{ steps.locate.outputs.apk_path }}
           retention-days: 30
 
@@ -141,14 +190,16 @@ jobs:
           tag_name: build-${{ github.run_number }}
           name: Pronote APK build ${{ github.run_number }}
           body: |
-            Auto-built debug APK from commit ${{ github.sha }}.
+            Auto-built release-signed APK from commit ${{ github.sha }}.
 
             Install on Android:
-            1. Download `app-debug.apk` below.
+            1. Download `app-release.apk` below.
             2. Open it on your phone.
             3. Approve "install from this source" if prompted.
 
-            This is a debug build — fine for testing, not for the Play Store.
+            Signed with the production release keystore — same fingerprint
+            as Play Store builds, so installing this won't conflict with
+            future Play Store updates.
           files: ${{ steps.locate.outputs.apk_path }}
           make_latest: true
         env:

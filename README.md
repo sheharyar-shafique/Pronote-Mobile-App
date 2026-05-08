@@ -9,7 +9,7 @@ Pronote-Mobile-App/
 ├── src/                    ← React app (pages, store, services, components)
 │   └── native/             ← Capacitor bridge helpers (mic, storage, push, etc.)
 ├── public/
-├── capacitor.config.ts     ← App ID com.pronote.clinical
+├── capacitor.config.ts     ← App ID com.pronoteai.scribe
 ├── platform-templates/     ← snippets to merge after `cap add ios|android`
 │   ├── ios/Info.plist.snippet.xml
 │   └── android/AndroidManifest.snippet.xml
@@ -125,7 +125,7 @@ Capacitor's WebView sends `Origin: https://localhost`. Add `https://localhost` t
 ## Releasing to the App Store
 
 1. Open `ios/App/App.xcworkspace` in Xcode.
-2. Set Bundle Identifier `com.pronote.clinical` and select your Apple Developer team.
+2. Set Bundle Identifier `com.pronoteai.scribe` and select your Apple Developer team.
 3. Bump `CFBundleShortVersionString` and `CFBundleVersion`.
 4. Add app icons to `ios/App/App/Assets.xcassets/AppIcon.appiconset/`.
 5. Product → Archive → Distribute App → App Store Connect.
@@ -149,7 +149,7 @@ Three options:
 
 ## Releasing to Google Play
 
-1. In Android Studio, set `applicationId = "com.pronote.clinical"` in `android/app/build.gradle`.
+1. In Android Studio, set `applicationId = "com.pronoteai.scribe"` in `android/app/build.gradle`.
 2. Generate an upload keystore (one-time):
    ```bash
    keytool -genkey -v -keystore pronote-upload.keystore \

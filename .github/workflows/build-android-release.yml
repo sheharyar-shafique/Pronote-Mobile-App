@@ -146,7 +146,11 @@ jobs:
           }
           EOF
 
-      - name: Build release AAB
+      - name: Build release AAB and APK
+        # bundleRelease produces the .aab Play Store wants; assembleRelease also
+        # produces a release-signed .apk we can upload to the Google Play
+        # "Sign and upload an APK" verification step. Doing both in one Gradle
+        # invocation reuses the compile cache (~30s extra vs running separately).
         working-directory: android
         env:
           PRONOTE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -154,41 +158,51 @@ jobs:
           PRONOTE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           chmod +x ./gradlew
-          ./gradlew bundleRelease --no-daemon --stacktrace
+          ./gradlew bundleRelease assembleRelease --no-daemon --stacktrace
 
-      - name: Locate AAB
+      - name: Locate AAB and APK
         id: locate
         run: |
           AAB=$(find android/app/build/outputs/bundle/release -name "*.aab" | head -1)
+          APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -1)
           echo "Found AAB at: $AAB"
-          ls -la "$AAB"
+          echo "Found APK at: $APK"
+          ls -la "$AAB" "$APK"
           echo "aab_path=$AAB" >> "$GITHUB_OUTPUT"
+          echo "apk_path=$APK" >> "$GITHUB_OUTPUT"
 
-      - name: Upload AAB as workflow artifact
+      - name: Upload AAB + APK as workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: pronote-release-aab
-          path: ${{ steps.locate.outputs.aab_path }}
+          name: pronote-release-bundle
+          path: |
+            ${{ steps.locate.outputs.aab_path }}
+            ${{ steps.locate.outputs.apk_path }}
           retention-days: 90
 
-      - name: Publish AAB as a GitHub Release (only on tag)
+      - name: Publish AAB + APK as a GitHub Release (only on tag)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: Pronote Android ${{ github.ref_name }}
           body: |
-            Production-signed Android App Bundle for Play Store upload.
+            Production-signed Android build for Play Store upload.
 
-            **Upload steps**:
-            1. Download `app-release.aab` below.
-            2. Go to Play Console → your app → Production (or Internal testing).
-            3. Click "Create new release" → upload the AAB.
-            4. Add release notes.
-            5. Submit for review.
+            Two files attached:
+            - `app-release.aab` — Android App Bundle. Upload this for the
+              actual Play Store release (Production / Internal testing tracks).
+            - `app-release.apk` — release-signed APK. Use this for the Play
+              Console "Android developer verification → Sign and upload an
+              APK" step, or for direct sideload testing on a physical device.
+
+            Both files share the same release keystore signature
+            (SHA-256 starts with FA:C6:B5:22…).
 
             Built from commit ${{ github.sha }}.
-          files: ${{ steps.locate.outputs.aab_path }}
+          files: |
+            ${{ steps.locate.outputs.aab_path }}
+            ${{ steps.locate.outputs.apk_path }}
           make_latest: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
